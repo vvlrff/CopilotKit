@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import logging
 
-from autogen import ConversableAgent, LLMConfig
-from autogen.ag_ui import AGUIStream  # type: ignore[import-not-found]  # runtime-only submodule (ag2[ag-ui] extra); not present in static type stubs
+from ag2 import Agent
+from ag2.ag_ui import AGUIStream
+from ag2.config.openai import OpenAIResponsesConfig
 from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,11 @@ def generate_a2ui() -> str:
     )
 
 
-agent = ConversableAgent(
-    name="declarative_gen_ui_assistant",
-    system_message=SYSTEM_PROMPT,
-    llm_config=LLMConfig({"model": "gpt-5-mini", "stream": True}),
-    human_input_mode="NEVER",
-    max_consecutive_auto_reply=8,
-    functions=[generate_a2ui],
+agent = Agent(
+    "declarative_gen_ui_assistant",
+    prompt=SYSTEM_PROMPT,
+    config=OpenAIResponsesConfig(model="gpt-5-mini", streaming=True),
+    tools=[generate_a2ui],
 )
 
 stream = AGUIStream(agent)

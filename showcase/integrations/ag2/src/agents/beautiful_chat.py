@@ -32,9 +32,11 @@ import os
 from typing import Annotated
 
 import openai
-from autogen import ConversableAgent, LLMConfig
-from autogen.ag_ui import AGUIStream
+from ag2 import Agent
+from ag2.ag_ui import AGUIStream
+from ag2.config.openai import OpenAIResponsesConfig
 from fastapi import FastAPI
+from pydantic import Field
 
 from tools import (
     build_a2ui_operations_from_tool_call,
@@ -124,7 +126,7 @@ def _generate_a2ui(context: str) -> str:
 
 async def generate_a2ui(
     context: Annotated[
-        str, "Conversation context summary the secondary LLM should design UI from"
+        str, Field(description="Conversation context summary the secondary LLM should design UI from")
     ],
 ) -> str:
     """Generate dynamic A2UI components based on the conversation.
@@ -140,16 +142,11 @@ async def generate_a2ui(
     return await asyncio.to_thread(_generate_a2ui, context)
 
 
-agent = ConversableAgent(
-    name="beautiful_chat_assistant",
-    system_message=SYSTEM_PROMPT,
-    llm_config=LLMConfig({"model": "gpt-5-mini", "stream": True}),
-    human_input_mode="NEVER",
-    # The agent may call generate_a2ui (its own backend tool) and
-    # generateSandboxedUi (frontend tool injected by the OGUI runtime
-    # middleware). Cap the loop to keep tool storms bounded.
-    max_consecutive_auto_reply=8,
-    functions=[generate_a2ui],
+agent = Agent(
+    "beautiful_chat_assistant",
+    prompt=SYSTEM_PROMPT,
+    config=OpenAIResponsesConfig(model="gpt-5-mini", streaming=True),
+    tools=[generate_a2ui],
 )
 
 stream = AGUIStream(agent)
