@@ -50,8 +50,10 @@ from agents._header_forwarding import (
     install_global_httpx_hook,
 )
 from agents._request_context import RequestUserMessageMiddleware
+from agents._usage_compat import install_usage_compat
 
 install_global_httpx_hook()
+install_usage_compat()
 
 from agents.agent import stream as default_stream
 from agents.a2ui_dynamic import a2ui_dynamic_app

@@ -356,11 +356,21 @@ def install_global_httpx_hook() -> None:
     if _GLOBAL_HTTPX_PATCHED:
         return
 
-    try:
-        import httpx
-    except ImportError:  # pragma: no cover
-        return
+    # AG2 1.x builds its OpenAI client on ``httpx2`` (not ``httpx``), so both
+    # modules must be patched for x-aimock-context to reach the LLM call.
+    import importlib
 
+    for module_name in ("httpx", "httpx2"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        _patch_httpx_module(module)
+    _GLOBAL_HTTPX_PATCHED = True
+
+
+def _patch_httpx_module(httpx: Any) -> None:
+    """Patch ``Client`` / ``AsyncClient`` of one httpx-compatible module."""
     _orig_sync_init = httpx.Client.__init__
     _orig_async_init = httpx.AsyncClient.__init__
 
@@ -400,4 +410,3 @@ def install_global_httpx_hook() -> None:
 
     httpx.Client.__init__ = _patched_sync_init
     httpx.AsyncClient.__init__ = _patched_async_init
-    _GLOBAL_HTTPX_PATCHED = True
