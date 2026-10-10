@@ -4,7 +4,7 @@ Agent Server for AG2
 FastAPI server that hosts the AG2 agent backends.
 The Next.js CopilotKit runtime proxies requests here via AG-UI protocol.
 
-Most demos share a single ConversableAgent at the root path. Demos that
+Most demos share a single AG2 Agent at the root path. Demos that
 require dedicated state mechanics or multi-agent topologies are mounted
 as their own sub-apps at distinct paths so each demo gets its own
 ContextVariables-backed state slot.
@@ -12,7 +12,7 @@ ContextVariables-backed state slot.
 
 # ORDER-CRITICAL: load .env BEFORE any agent module imports. The agent
 # modules (agents/agent.py et al.) construct module-level
-# ``openai.AsyncOpenAI()`` / autogen ``LLMConfig`` clients that read
+# ``openai.AsyncOpenAI()`` / AG2 ``OpenAIResponsesConfig`` clients that read
 # ``OPENAI_API_KEY`` (and friends) at construction time. If we import the
 # agent modules before calling ``load_dotenv()``, those module-level
 # clients latch onto whatever the OS environment had at import time
@@ -40,26 +40,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 # ORDER-CRITICAL: install the global httpx hook BEFORE any agent module
-# imports. The autogen / openai SDK construct their httpx client lazily
+# imports. The ag2 / openai SDK construct their httpx client lazily
 # per-call, but other integrations construct at module-import time;
 # keeping the patch at the top of agent_server.py is the consistent
 # placement across all Python showcase integrations and is harmless here.
 from agents._cvdiag_backend import CvdiagBackendMiddleware
 from agents._header_forwarding import (
     HeaderForwardingHTTPMiddleware,
-    install_executor_contextvar_propagation,
     install_global_httpx_hook,
 )
 from agents._request_context import RequestUserMessageMiddleware
 
 install_global_httpx_hook()
-# AG2-specific: autogen's ConversableAgent.a_generate_oai_reply dispatches
-# the underlying sync LLM call onto the default ThreadPoolExecutor via
-# loop.run_in_executor(...), which does NOT propagate ContextVars to the
-# worker thread. Without this, the forwarded-header ContextVar set on the
-# inbound request task is empty by the time the outbound httpx hook fires,
-# and aimock can't match the right fixture for the request.
-install_executor_contextvar_propagation()
 
 from agents.agent import stream as default_stream
 from agents.a2ui_dynamic import a2ui_dynamic_app
@@ -138,8 +130,8 @@ app.add_middleware(CvdiagBackendMiddleware)
 
 # R2-A3: Capture the latest user message from each inbound RunAgentInput POST
 # into a per-request ContextVar so tool handlers (e.g. generate_a2ui) can read
-# the per-request prompt without consulting autogen's shared, race-prone
-# ``ConversableAgent.chat_messages`` state. See agents/_request_context.py.
+# the per-request prompt without consulting shared, race-prone agent
+# state. See agents/_request_context.py.
 # Added AFTER the BaseHTTPMiddlewares above so it wraps them (raw ASGI on
 # the outside preserves ContextVar propagation across the anyio
 # TaskGroups they spawn internally).
@@ -173,9 +165,7 @@ app.mount(
     "/tool-rendering-reasoning-chain",
     tool_rendering_reasoning_chain_app,
 )
-# Reasoning-aware route. AG2's stock AGUIStream emits no REASONING_MESSAGE_*
-# events (and autogen drops the model's reasoning_content channel), so the
-# reasoning-custom / reasoning-default cells use this custom sub-app instead.
+# Reasoning-aware route for the reasoning-custom / reasoning-default cells.
 # Mirrors agno's /reasoning/agui mount.
 app.mount("/reasoning", reasoning_app)
 app.mount("/agent-config", agent_config_app)
